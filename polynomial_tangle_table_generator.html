@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Polynomial Tangle Table Generator</title>
+<style>
+  :root {
+    --ink: #111;
+    --paper: #fff;
+    --panel: #f5f5f5;
+    --line: #1a1a1a;
+    --muted: #666;
+    --cell-w: 132px;
+    --cell-h: 88px;
+    --math-size: 23px;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    color: var(--ink);
+    background: #ececec;
+  }
+
+  .app {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+
+  .controls {
+    background: var(--paper);
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-bottom: 18px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06);
+  }
+
+  .controls h1 {
+    font-size: 22px;
+    margin: 0 0 14px;
+  }
+
+  .control-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(150px, 1fr));
+    gap: 14px 18px;
+    align-items: end;
+  }
+
+  .field label,
+  .difficulty-wrap label {
+    display: block;
+    font-weight: 700;
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+
+  input[type="number"] {
+    width: 100%;
+    padding: 9px 10px;
+    font-size: 16px;
+    border: 1px solid #aaa;
+    border-radius: 6px;
+    background: white;
+  }
+
+  .difficulty-wrap {
+    grid-column: span 2;
+  }
+
+  .slider-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .slider-row span {
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  input[type="range"] { width: 100%; }
+
+  .buttons {
+    grid-column: span 2;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  button {
+    border: 1px solid #222;
+    background: white;
+    color: #111;
+    border-radius: 6px;
+    padding: 9px 13px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  button.primary {
+    background: #111;
+    color: white;
+  }
+
+  button:hover { transform: translateY(-1px); }
+  button:disabled { opacity: .5; cursor: default; transform: none; }
+
+  .status {
+    margin-top: 12px;
+    font-size: 13px;
+    color: #444;
+    min-height: 18px;
+  }
+
+  .sheet {
+    background: var(--paper);
+    min-height: 760px;
+    padding: 30px 28px 36px;
+    box-shadow: 0 2px 10px rgba(0,0,0,.08);
+  }
+
+  .worksheet-head {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: end;
+    gap: 18px;
+    margin-bottom: 28px;
+    font-size: 15px;
+  }
+
+  .worksheet-head .title {
+    font-weight: 700;
+    font-size: 20px;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .line {
+    display: inline-block;
+    min-width: 190px;
+    border-bottom: 1px solid #111;
+    transform: translateY(-2px);
+  }
+
+  .table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 6px;
+  }
+
+  table.tangle {
+    border-collapse: collapse;
+    margin: 0 auto;
+    table-layout: fixed;
+    background: white;
+  }
+
+  table.tangle th,
+  table.tangle td {
+    border: 2px solid var(--line);
+    width: var(--cell-w);
+    min-width: var(--cell-w);
+    height: var(--cell-h);
+    text-align: center;
+    vertical-align: middle;
+    padding: 5px 7px;
+    font-size: var(--math-size);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  table.tangle th.corner {
+    background-image: repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 5px,
+      rgba(0,0,0,.52) 5px,
+      rgba(0,0,0,.52) 6px
+    );
+  }
+
+  table.tangle th.header-cell {
+    font-weight: 600;
+    font-family: inherit;
+  }
+
+  table.tangle th.header-given {
+    font-weight: 600;
+    font-family: inherit;
+  }
+
+  table.tangle th.answer-added {
+    background: #f3f3f3;
+    color: #555;
+  }
+
+  table.tangle td.given {
+    font-weight: 600;
+  }
+
+  table.tangle td.answer-added {
+    background: #f3f3f3;
+    color: #555;
+  }
+
+  .math sup {
+    font-size: .62em;
+    vertical-align: super;
+    line-height: 0;
+  }
+
+  .directions {
+    margin: 22px auto 0;
+    max-width: 900px;
+    font-size: 14px;
+    line-height: 1.4;
+    color: #222;
+  }
+
+  .answer-note {
+    display: none;
+    margin: 12px auto 0;
+    max-width: 900px;
+    font-size: 13px;
+    color: #555;
+  }
+
+  body.showing-solution .answer-note { display: block; }
+
+  @media (max-width: 850px) {
+    .control-grid { grid-template-columns: repeat(2, 1fr); }
+    .difficulty-wrap, .buttons { grid-column: span 2; }
+    .worksheet-head { grid-template-columns: 1fr; text-align: left; }
+    .worksheet-head .title { order: -1; text-align: left; }
+  }
+
+  @page {
+    size: landscape;
+    margin: .42in;
+  }
+
+  @media print {
+    body { background: white; }
+    .app { max-width: none; margin: 0; padding: 0; }
+    .controls { display: none !important; }
+    .sheet {
+      box-shadow: none;
+      min-height: 0;
+      padding: 0;
+    }
+    .table-wrap { overflow: visible; }
+    .directions { margin-top: 18px; }
+    button { display: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <section class="controls">
+    <h1>Polynomial Tangle Table Generator</h1>
+    <div class="control-grid">
+      <div class="field">
+        <label for="minVal">Start value a</label>
+        <input id="minVal" type="number" value="1" step="1" />
+      </div>
+
+      <div class="field">
+        <label for="maxVal">End value b</label>
+        <input id="maxVal" type="number" value="5" step="1" />
+      </div>
+
+      <div class="field">
+        <label for="topGiven">Top row factors given</label>
+        <input id="topGiven" type="number" value="1" min="0" step="1" />
+      </div>
+
+      <div class="field">
+        <label for="sideGiven">Left column factors given</label>
+        <input id="sideGiven" type="number" value="1" min="0" step="1" />
+      </div>
+
+      <div class="difficulty-wrap">
+        <label for="difficulty">Difficulty: <span id="difficultyLabel">6</span>/10</label>
+        <div class="slider-row">
+          <span>More clues</span>
+          <input id="difficulty" type="range" min="1" max="10" value="6" step="1" />
+          <span>Near-minimum clues</span>
+        </div>
+      </div>
+
+      <div class="buttons">
+        <button id="generateBtn" class="primary">Generate New Table</button>
+        <button id="solutionBtn">Show Solution</button>
+        <button id="printBtn">Print / Save PDF</button>
+      </div>
+    </div>
+    <div class="status" id="status"></div>
+  </section>
+
+  <main class="sheet">
+    <div class="worksheet-head">
+      <div>Name: <span class="line"></span></div>
+      <div class="title">Polynomial Tangle Table</div>
+      <div style="text-align:right">Date: <span class="line" style="min-width:150px"></span></div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="tangle" id="tangleTable" aria-label="Polynomial tangle table"></table>
+    </div>
+
+    <div class="directions" id="directions">
+      Find the factors that belong across the top and down the left side. Each factor from the chosen range is used exactly once in each direction.
+    </div>
+    <div class="answer-note">Gray cells and gray headers were blank on the student version.</div>
+  </main>
+</div>
+
+<script>
+(() => {
+  const minInput = document.getElementById('minVal');
+  const maxInput = document.getElementById('maxVal');
+  const topGivenInput = document.getElementById('topGiven');
+  const sideGivenInput = document.getElementById('sideGiven');
+  const difficultyInput = document.getElementById('difficulty');
+  const difficultyLabel = document.getElementById('difficultyLabel');
+  const generateBtn = document.getElementById('generateBtn');
+  const solutionBtn = document.getElementById('solutionBtn');
+  const printBtn = document.getElementById('printBtn');
+  const statusEl = document.getElementById('status');
+  const tableEl = document.getElementById('tangleTable');
+
+  let puzzle = null;
+  let showingSolution = false;
+
+  difficultyInput.addEventListener('input', () => {
+    difficultyLabel.textContent = difficultyInput.value;
+  });
+
+  generateBtn.addEventListener('click', generatePuzzle);
+  solutionBtn.addEventListener('click', () => {
+    if (!puzzle) return;
+    showingSolution = !showingSolution;
+    document.body.classList.toggle('showing-solution', showingSolution);
+    solutionBtn.textContent = showingSolution ? 'Hide Solution' : 'Show Solution';
+    renderTable();
+  });
+  printBtn.addEventListener('click', () => window.print());
+
+  function rangeInclusive(a, b) {
+    const out = [];
+    for (let v = a; v <= b; v++) out.push(v);
+    return out;
+  }
+
+  function shuffle(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function cellKey(r, c) {
+    return `${r},${c}`;
+  }
+
+  function factorHTML(k) {
+    if (k === 0) return '<span class="math">x</span>';
+    if (k > 0) return `<span class="math">(x + ${k})</span>`;
+    return `<span class="math">(x &minus; ${Math.abs(k)})</span>`;
+  }
+
+  function polynomialHTML(a, b) {
+    const s = a + b;
+    const p = a * b;
+    let html = 'x<sup>2</sup>';
+
+    if (s !== 0) {
+      const sign = s > 0 ? ' + ' : ' &minus; ';
+      const mag = Math.abs(s);
+      html += sign + (mag === 1 ? '' : mag) + 'x';
+    }
+
+    if (p !== 0) {
+      const sign = p > 0 ? ' + ' : ' &minus; ';
+      html += sign + Math.abs(p);
+    }
+
+    return `<span class="math">${html}</span>`;
+  }
+
+  function pairMatches(rowVal, colVal, clue) {
+    return rowVal + colVal === clue.sum && rowVal * colVal === clue.product;
+  }
+
+  // Counts solutions, stopping as soon as "limit" solutions are found.
+  // Row labels and column labels are each permutations of the same value set.
+  function countSolutions(values, clueSet, clueGrid, fixedRows = new Map(), fixedCols = new Map(), limit = 2) {
+    const n = values.length;
+    const rowClues = Array.from({ length: n }, () => []);
+    const colClues = Array.from({ length: n }, () => []);
+
+    for (const key of clueSet) {
+      const [r, c] = key.split(',').map(Number);
+      const clue = clueGrid[r][c];
+      rowClues[r].push({ c, clue });
+      colClues[c].push({ r, clue });
+    }
+
+    const rows = Array(n).fill(null);
+    const cols = Array(n).fill(null);
+    const usedRows = new Set();
+    const usedCols = new Set();
+    let solutions = 0;
+
+    for (const [r, v] of fixedRows) {
+      rows[r] = v;
+      usedRows.add(v);
+    }
+    for (const [c, v] of fixedCols) {
+      cols[c] = v;
+      usedCols.add(v);
+    }
+
+    function rowDomain(r) {
+      const domain = [];
+      for (const v of values) {
+        if (usedRows.has(v)) continue;
+        let ok = true;
+        for (const item of rowClues[r]) {
+          const assignedCol = cols[item.c];
+          if (assignedCol !== null) {
+            if (!pairMatches(v, assignedCol, item.clue)) {
+              ok = false;
+              break;
+            }
+          } else {
+            let exists = false;
+            for (const cv of values) {
+              if (usedCols.has(cv)) continue;
+              if (pairMatches(v, cv, item.clue)) {
+                exists = true;
+                break;
+              }
+            }
+            if (!exists) {
+              ok = false;
+              break;
+            }
+          }
+        }
+        if (ok) domain.push(v);
+      }
+      return domain;
+    }
+
+    function colDomain(c) {
+      const domain = [];
+      for (const v of values) {
+        if (usedCols.has(v)) continue;
+        let ok = true;
+        for (const item of colClues[c]) {
+          const assignedRow = rows[item.r];
+          if (assignedRow !== null) {
+            if (!pairMatches(assignedRow, v, item.clue)) {
+              ok = false;
+              break;
+            }
+          } else {
+            let exists = false;
+            for (const rv of values) {
+              if (usedRows.has(rv)) continue;
+              if (pairMatches(rv, v, item.clue)) {
+                exists = true;
+                break;
+              }
+            }
+            if (!exists) {
+              ok = false;
+              break;
+            }
+          }
+        }
+        if (ok) domain.push(v);
+      }
+      return domain;
+    }
+
+    function recurse(assignedCount) {
+      if (solutions >= limit) return;
+      if (assignedCount === n * 2) {
+        solutions++;
+        return;
+      }
+
+      let bestType = null;
+      let bestIndex = -1;
+      let bestDomain = null;
+
+      for (let r = 0; r < n; r++) {
+        if (rows[r] !== null) continue;
+        const d = rowDomain(r);
+        if (d.length === 0) return;
+        if (bestDomain === null || d.length < bestDomain.length) {
+          bestType = 'row';
+          bestIndex = r;
+          bestDomain = d;
+          if (d.length === 1) break;
+        }
+      }
+
+      if (bestDomain === null || bestDomain.length > 1) {
+        for (let c = 0; c < n; c++) {
+          if (cols[c] !== null) continue;
+          const d = colDomain(c);
+          if (d.length === 0) return;
+          if (bestDomain === null || d.length < bestDomain.length) {
+            bestType = 'col';
+            bestIndex = c;
+            bestDomain = d;
+            if (d.length === 1) break;
+          }
+        }
+      }
+
+      if (bestType === 'row') {
+        for (const v of bestDomain) {
+          rows[bestIndex] = v;
+          usedRows.add(v);
+          recurse(assignedCount + 1);
+          usedRows.delete(v);
+          rows[bestIndex] = null;
+          if (solutions >= limit) return;
+        }
+      } else {
+        for (const v of bestDomain) {
+          cols[bestIndex] = v;
+          usedCols.add(v);
+          recurse(assignedCount + 1);
+          usedCols.delete(v);
+          cols[bestIndex] = null;
+          if (solutions >= limit) return;
+        }
+      }
+    }
+
+    recurse(fixedRows.size + fixedCols.size);
+    return solutions;
+  }
+
+  function validateInputs() {
+    const a = Number(minInput.value);
+    const b = Number(maxInput.value);
+
+    if (!Number.isInteger(a) || !Number.isInteger(b)) {
+      throw new Error('a and b must be whole numbers.');
+    }
+    if (a > b) {
+      throw new Error('The start value a must be less than or equal to b.');
+    }
+
+    const n = b - a + 1;
+    if (n < 2) {
+      throw new Error('Choose a range containing at least 2 values.');
+    }
+    if (n > 12) {
+      throw new Error('For reliable in-browser generation, use a range of 12 values or fewer.');
+    }
+
+    const topGiven = Number(topGivenInput.value);
+    const sideGiven = Number(sideGivenInput.value);
+    if (!Number.isInteger(topGiven) || !Number.isInteger(sideGiven) || topGiven < 0 || sideGiven < 0) {
+      throw new Error('The numbers of given factors must be whole numbers 0 or greater.');
+    }
+    if (topGiven > n || sideGiven > n) {
+      throw new Error(`Given factors cannot exceed the table size (${n}).`);
+    }
+
+    topGivenInput.max = n;
+    sideGivenInput.max = n;
+
+    return { a, b, n, values: rangeInclusive(a, b), topGiven, sideGiven };
+  }
+
+  function generatePuzzle() {
+    let config;
+    try {
+      config = validateInputs();
+    } catch (err) {
+      statusEl.textContent = err.message;
+      return;
+    }
+
+    generateBtn.disabled = true;
+    solutionBtn.disabled = true;
+    statusEl.textContent = 'Building a uniquely solvable table…';
+
+    // Let the status paint before the uniqueness checks begin.
+    setTimeout(() => {
+      try {
+        const { values, n, topGiven, sideGiven } = config;
+        const rowSolution = shuffle(values);
+        const colSolution = shuffle(values);
+
+        // Randomly choose which row/column factors are prefilled for students.
+        const givenTopIndices = new Set(shuffle(rangeInclusive(0, n - 1)).slice(0, topGiven));
+        const givenSideIndices = new Set(shuffle(rangeInclusive(0, n - 1)).slice(0, sideGiven));
+        const fixedRows = new Map([...givenSideIndices].map(r => [r, rowSolution[r]]));
+        const fixedCols = new Map([...givenTopIndices].map(c => [c, colSolution[c]]));
+
+        const clueGrid = Array.from({ length: n }, (_, r) =>
+          Array.from({ length: n }, (_, c) => ({
+            sum: rowSolution[r] + colSolution[c],
+            product: rowSolution[r] * colSolution[c]
+          }))
+        );
+
+        const allKeys = [];
+        for (let r = 0; r < n; r++) {
+          for (let c = 0; c < n; c++) allKeys.push(cellKey(r, c));
+        }
+
+        // Start from the complete table and greedily remove clues whenever
+        // the puzzle still has exactly one solution. This creates a locally
+        // minimal uniquely-solvable clue set.
+        const minimalSet = new Set(allKeys);
+        const removalOrder = shuffle(allKeys);
+
+        for (const key of removalOrder) {
+          minimalSet.delete(key);
+          const count = countSolutions(values, minimalSet, clueGrid, fixedRows, fixedCols, 2);
+          if (count !== 1) minimalSet.add(key);
+        }
+
+        // Difficulty 1 = all product clues shown.
+        // Difficulty 10 = the greedily found near-minimum clue set.
+        const difficulty = Number(difficultyInput.value);
+        const t = (difficulty - 1) / 9;
+        const maxClues = allKeys.length;
+        const minClues = minimalSet.size;
+        const targetClues = Math.round(maxClues - t * (maxClues - minClues));
+
+        const finalClues = new Set(minimalSet);
+        const removable = shuffle(allKeys.filter(k => !minimalSet.has(k)));
+        while (finalClues.size < targetClues && removable.length) {
+          finalClues.add(removable.pop());
+        }
+
+        puzzle = {
+          ...config,
+          rowSolution,
+          colSolution,
+          clueGrid,
+          clueSet: finalClues,
+          givenTopIndices,
+          givenSideIndices,
+          minClues,
+          targetClues
+        };
+
+        showingSolution = false;
+        document.body.classList.remove('showing-solution');
+        solutionBtn.textContent = 'Show Solution';
+        renderTable();
+
+        const blanks = n * n - finalClues.size;
+        statusEl.textContent = `Unique solution guaranteed • ${topGiven} top factor${topGiven === 1 ? '' : 's'} given • ${sideGiven} side factor${sideGiven === 1 ? '' : 's'} given • ${finalClues.size} product clues shown • ${blanks} blank product cells • minimum found: ${minClues} product clues`;
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = 'Could not generate this table. Try again or use a slightly smaller range.';
+      } finally {
+        generateBtn.disabled = false;
+        solutionBtn.disabled = false;
+      }
+    }, 20);
+  }
+
+  function sizeTableForRange(n) {
+    const width = Math.max(88, Math.min(146, Math.floor(900 / (n + 1))));
+    const height = Math.max(66, Math.min(94, Math.floor(width * 0.68)));
+    const font = Math.max(15, Math.min(24, Math.floor(width * 0.17)));
+    document.documentElement.style.setProperty('--cell-w', `${width}px`);
+    document.documentElement.style.setProperty('--cell-h', `${height}px`);
+    document.documentElement.style.setProperty('--math-size', `${font}px`);
+  }
+
+  function renderTable() {
+    if (!puzzle) return;
+    const { n, rowSolution, colSolution, clueSet, givenTopIndices, givenSideIndices } = puzzle;
+    sizeTableForRange(n);
+
+    let html = '<thead><tr><th class="corner"></th>';
+    for (let c = 0; c < n; c++) {
+      const isGiven = givenTopIndices.has(c);
+      const shouldShow = showingSolution || isGiven;
+      const cls = isGiven ? 'header-cell header-given' : (showingSolution ? 'header-cell answer-added' : 'header-cell');
+      html += `<th class="${cls}">${shouldShow ? factorHTML(colSolution[c]) : ''}</th>`;
+    }
+    html += '</tr></thead><tbody>';
+
+    for (let r = 0; r < n; r++) {
+      const isGivenSide = givenSideIndices.has(r);
+      const shouldShowSide = showingSolution || isGivenSide;
+      const sideCls = isGivenSide ? 'header-cell header-given' : (showingSolution ? 'header-cell answer-added' : 'header-cell');
+      html += `<tr><th class="${sideCls}">${shouldShowSide ? factorHTML(rowSolution[r]) : ''}</th>`;
+      for (let c = 0; c < n; c++) {
+        const key = cellKey(r, c);
+        const isGiven = clueSet.has(key);
+        if (isGiven) {
+          html += `<td class="given">${polynomialHTML(rowSolution[r], colSolution[c])}</td>`;
+        } else if (showingSolution) {
+          html += `<td class="answer-added">${polynomialHTML(rowSolution[r], colSolution[c])}</td>`;
+        } else {
+          html += '<td></td>';
+        }
+      }
+      html += '</tr>';
+    }
+
+    html += '</tbody>';
+    tableEl.innerHTML = html;
+  }
+
+  generatePuzzle();
+})();
+</script>
+</body>
+</html>
